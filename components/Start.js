@@ -1,11 +1,17 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, Text, Button, TextInput, ImageBackground, TouchableOpacity } from 'react-native';
+import { useEffect, useState } from "react";
+import {
+  ImageBackground,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
 const Start = ({ navigation }) => {
-  const [name, setName] = useState('');
+  const [name, setName] = useState("");
   const [selectedColor, setSelectedColor] = useState();
   const colorOptions = ["#090C08", "#474056", "#8A95A5", "#B9C6AE"];
-  const colorLabels = ["Black", "Purple", "Blue", "Green"];
 
   useEffect(() => {
     navigation.setOptions({ headerShown: false });
@@ -13,26 +19,28 @@ const Start = ({ navigation }) => {
 
   return (
     <ImageBackground
-      style={styles.backgroundImage}
+      style={styles.bgImage}
       source={require("../assets/background-image.png")}
       resizeMode="cover"
     >
-      <Text style={styles.title}>Chat App</Text>
+      <Text style={styles.title}>Let's Chat!</Text>
+      {/* Container with white background. Every elements are wrapped 
+      inside separate containers for better responsive behavior*/}
       <View style={styles.container}>
-        <TextInput
-          style={styles.textInput}
-          value={name}
-          onChangeText={setName}
-          placeholder='Your Name'
-        />
-        <View
-          style={styles.colorContainer}
-        >
+        {/* Container for the input field */}
+        <View style={styles.inputContainer}>
+          <TextInput
+            style={styles.textInput}
+            value={name}
+            onChangeText={setName}
+            placeholder="Your Name"
+          />
+        </View>
+        {/* Container for the color selection */}
+        <View style={styles.colorContainer}>
           <Text style={styles.colorText}>Choose Background Color</Text>
-          <View
-            style={styles.colorButtonContainer}
-          >
-            {colorOptions.map((color, index) => (
+          <View style={styles.colorButtonContainer}>
+            {colorOptions.map((color) => (
               <TouchableOpacity
                 key={`color-button__${color}`}
                 title="Got to Screen 2"
@@ -49,6 +57,7 @@ const Start = ({ navigation }) => {
             ))}
           </View>
         </View>
+        {/* Container for the "Start Chatting" button */}
         <View style={styles.buttonContainer}>
           <TouchableOpacity
             style={styles.button}
@@ -65,22 +74,15 @@ const Start = ({ navigation }) => {
       </View>
     </ImageBackground>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: {
-    justifyContent: "center",
+  bgImage: {
+    flex: 1,
+    width: "100%",
+    height: "100%",
     alignItems: "center",
-    width: "88%",
-    height: "44%",
-    backgroundColor: "#ffffff",
-  },
-  textInput: {
-    width: "88%",
-    padding: 15,
-    borderWidth: 1,
-    marginTop: 15,
-    marginBottom: 15
+    justifyContent: "space-evenly",
   },
   title: {
     fontSize: 45,
@@ -88,12 +90,27 @@ const styles = StyleSheet.create({
     color: "#ffffff",
     height: "40%",
   },
-  backgroundImage: {
-    flex: 1,
-    width: "100%",
-    height: "100%",
+  container: {
+    justifyContent: "center",
     alignItems: "center",
-    justifyContent: "space-evenly",
+    width: "88%",
+    height: "44%",
+    backgroundColor: "#ffffff",
+  },
+  inputContainer: {
+    flex: 3,
+    width: "88%",
+    justifyContent: "center",
+    alignItems: "center",
+  },
+  textInput: {
+    width: "100%",
+    padding: 15,
+    borderWidth: 1,
+    fontSize: 16,
+    fontWeight: "300",
+    color: "#757083",
+    opacity: 1,
   },
   colorContainer: {
     flex: 5,
