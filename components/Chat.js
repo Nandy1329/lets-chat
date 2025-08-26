@@ -1,75 +1,69 @@
-import { useState, useEffect } from 'react';
-import { StyleSheet, View, KeyboardAvoidingView, Platform } from 'react-native';
+import { useState, useEffect, useCallback } from 'react';
+import { StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Bubble, GiftedChat } from 'react-native-gifted-chat';
 
 const Chat = ({ route, navigation }) => {
   const { name, color } = route.params;
-  const [messages, setMessages] = useState([]);
-
-  const onSend = (newMessages) => {
-    setMessages(previousMessages => GiftedChat.append(previousMessages, newMessages))
-  }
-
-  useEffect(() => {
-    navigation.setOptions({ title: name })
-  }, []);
-
-  useEffect(() => {
-    setMessages([
-      {
-        _id: 1,
-        text: "Hello developer",
-        createdAt: new Date(),
-        user: {
-          _id: 2,
-          name: "React Native",
-          avatar: "https://placeimg.com/140/140/any",
-        },
-      },
-      {
+  const [messages, setMessages] = useState([
+    {
+      _id: 1,
+      text: "Hello developer",
+      createdAt: new Date(),
+      user: {
         _id: 2,
-        text: 'You have entered the chat',
-        createdAt: new Date(),
-        system: true,
+        name: "React Native",
+        avatar: "https://placeimg.com/140/140/any",
       },
-    ]);
+    },
+    {
+      _id: 2,
+      text: "You have entered the chat",
+      createdAt: new Date(),
+      system: true,
+    },
+  ]);
+
+  // Set navigation title
+  useEffect(() => {
+    navigation.setOptions({ title: name });
+  }, [name]);
+
+  // ...existing code...
+
+  // Memoize onSend to prevent unnecessary re-renders
+  const onSend = useCallback((newMessages = []) => {
+    setMessages(prev => GiftedChat.append(prev, newMessages));
   }, []);
 
-  const renderBubble = (props) => {
-    return <Bubble
+  // Bubble styling
+  const renderBubble = useCallback((props) => (
+    <Bubble
       {...props}
       wrapperStyle={{
-        right: {
-          backgroundColor: "#000"
-        },
-        left: {
-          backgroundColor: "#FFF"
-        }
+        right: { backgroundColor: color || '#000' },
+        left: { backgroundColor: '#FFF' },
       }}
     />
-  }
+  ), [color]);
 
   return (
-    <View style={[styles.container, { backgroundColor: color }]}>
+    <KeyboardAvoidingView
+      style={styles.container}
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    >
       <GiftedChat
         messages={messages}
+        onSend={onSend}
+        user={{ _id: 1 }}
         renderBubble={renderBubble}
-        onSend={messages => onSend(messages)}
-        user={{
-          _id: 1
-        }}
       />
-      {Platform.OS === 'android' ? <KeyboardAvoidingView behavior="height" /> : null}
-    </View>
+    </KeyboardAvoidingView>
   );
-}
+};
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center'
-  }
+  container: { flex: 1 },
 });
 
 export default Chat;

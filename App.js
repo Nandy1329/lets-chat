@@ -5,6 +5,7 @@ import { createNativeStackNavigator } from "@react-navigation/native-stack";
 // Import screen components
 import Start from "./components/Start";
 import Chat from "./components/Chat";
+console.log('render')
 
 // Create the stack navigator
 const Stack = createNativeStackNavigator();
