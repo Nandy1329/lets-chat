@@ -1,9 +1,10 @@
+
 import { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
 import { Bubble, GiftedChat } from 'react-native-gifted-chat';
 
 const Chat = ({ route, navigation }) => {
-  const { name, color } = route.params;
+  const { name, backgroundColor } = route.params;
   const [messages, setMessages] = useState([
     {
       _id: 1,
@@ -23,12 +24,10 @@ const Chat = ({ route, navigation }) => {
     },
   ]);
 
-  // Set navigation title
+  // Set navigation title  npx expo run:android
   useEffect(() => {
     navigation.setOptions({ title: name });
   }, [name]);
-
-  // ...existing code...
 
   // Memoize onSend to prevent unnecessary re-renders
   const onSend = useCallback((newMessages = []) => {
@@ -40,11 +39,11 @@ const Chat = ({ route, navigation }) => {
     <Bubble
       {...props}
       wrapperStyle={{
-        right: { backgroundColor: color || '#000' },
+        right: { backgroundColor: backgroundColor || '#000' },
         left: { backgroundColor: '#FFF' },
       }}
     />
-  ), [color]);
+  ), [backgroundColor]);
 
   return (
     <KeyboardAvoidingView

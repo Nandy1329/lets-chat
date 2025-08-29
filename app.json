@@ -23,5 +23,8 @@
   "private": true,
   "overrides": {
     "react-native-safe-area-context": "5.4.0"
+  },
+  "android": {
+    "package": "com.nicki.letschat"
   }
 }
