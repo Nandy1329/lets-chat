@@ -25,13 +25,14 @@ const Start = ({ navigation }) => {
       <View style={styles.container}>
         {/* Background Image */}
         <ImageBackground
-          source={require("../assets/background-image.png")} // Direct require method
+          source={require("../assets/background-image.png")}
           style={styles.background}
         >
+          {/* App Title at the top */}
+          <View style={styles.titleContainer}>
+            <Text style={styles.title}>Let's Chat!</Text>
+          </View>
           <View style={styles.contentContainer}>
-            {/* App Title */}
-            <Text style={styles.title}>Welcome to ChatApp!</Text>
-
             {/* Input and Options Container */}
             <View style={styles.inputContainer}>
               {/* TextInput for entering the user's name */}
@@ -52,9 +53,9 @@ const Start = ({ navigation }) => {
                     style={[
                       styles.colorOption,
                       { backgroundColor: color },
-                      backgroundColor === color && styles.selectedColor, // Highlight selected color
+                      backgroundColor === color && styles.selectedColor,
                     ]}
-                    onPress={() => setBackgroundColor(color)} // Update selected color
+                    onPress={() => setBackgroundColor(color)}
                   />
                 ))}
               </View>
@@ -64,8 +65,8 @@ const Start = ({ navigation }) => {
                 style={styles.button}
                 onPress={() =>
                   navigation.navigate("Chat", {
-                    name: name || "User", // Default name if empty
-                    backgroundColor, // Pass selected color to Chat screen
+                    name: name || "User",
+                    backgroundColor,
                   })
                 }
               >
@@ -95,11 +96,15 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingBottom: "20%",
   },
+  titleContainer: {
+    alignItems: "center",
+    marginTop: 60,
+    marginBottom: 20,
+  },
   title: {
     fontSize: 45,
     fontWeight: "600",
     color: "#FFFFFF",
-    marginBottom: 40,
   },
   inputContainer: {
     backgroundColor: "white",
@@ -116,8 +121,8 @@ const styles = StyleSheet.create({
     marginBottom: 20,
     fontSize: 16,
     fontWeight: "300",
-    color: "#757083",
-    opacity: 0.5,
+    color: "#222",
+    // opacity removed for darker text
   },
   colorText: {
     fontSize: 16,

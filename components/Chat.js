@@ -1,7 +1,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { Bubble, GiftedChat } from 'react-native-gifted-chat';
+import { Bubble, GiftedChat, SystemMessage } from 'react-native-gifted-chat';
 
 const Chat = ({ route, navigation }) => {
   const { name, backgroundColor } = route.params;
@@ -34,20 +34,38 @@ const Chat = ({ route, navigation }) => {
     setMessages(prev => GiftedChat.append(prev, newMessages));
   }, []);
 
-  // Bubble styling
+  // Bubble styling: user's bubble black with white text
   const renderBubble = useCallback((props) => (
     <Bubble
       {...props}
       wrapperStyle={{
-        right: { backgroundColor: backgroundColor || '#000' },
+        right: { backgroundColor: '#000' },
         left: { backgroundColor: '#FFF' },
       }}
+      textStyle={{
+        right: { color: '#fff' },
+        left: { color: '#222' },
+      }}
     />
-  ), [backgroundColor]);
+  ), []);
+
+  // Dynamically set container background color
+  const containerStyle = [
+    styles.container,
+    { backgroundColor: backgroundColor || '#fff' }
+  ];
+
+  // Custom system message style
+  const renderSystemMessage = (props) => (
+    <SystemMessage
+      {...props}
+      textStyle={{ color: '#222', fontWeight: 'bold' }}
+    />
+  );
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={containerStyle}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
     >
@@ -56,6 +74,7 @@ const Chat = ({ route, navigation }) => {
         onSend={onSend}
         user={{ _id: 1 }}
         renderBubble={renderBubble}
+        renderSystemMessage={renderSystemMessage}
       />
     </KeyboardAvoidingView>
   );
