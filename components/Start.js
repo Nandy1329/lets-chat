@@ -8,14 +8,30 @@ import {
   ImageBackground,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from "react-native";
+import { getAuth, signInAnonymously } from "firebase/auth"; // <-- Import these
 
 const Start = ({ navigation }) => {
   const [name, setName] = useState(""); // State for user input
   const [backgroundColor, setBackgroundColor] = useState("#090C08"); // Default background color
-
-  // Array of background color options
   const colors = ["#090C08", "#474056", "#8A95A5", "#B9C6AE"];
+  const auth = getAuth(); // <-- Initialize Auth
+
+  // Function for anonymous sign-in and navigation
+  const handleStartChatting = () => {
+    signInAnonymously(auth)
+      .then(result => {
+        navigation.navigate("Chat", {
+          userID: result.user.uid,
+          name: name || "User",
+          backgroundColor,
+        });
+      })
+      .catch((error) => {
+        Alert.alert("Unable to sign in, try again.");
+      });
+  };
 
   return (
     <KeyboardAvoidingView
@@ -23,19 +39,15 @@ const Start = ({ navigation }) => {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
       <View style={styles.container}>
-        {/* Background Image */}
         <ImageBackground
           source={require("../assets/background-image.png")}
           style={styles.background}
         >
-          {/* App Title at the top */}
           <View style={styles.titleContainer}>
             <Text style={styles.title}>Let's Chat!</Text>
           </View>
           <View style={styles.contentContainer}>
-            {/* Input and Options Container */}
             <View style={styles.inputContainer}>
-              {/* TextInput for entering the user's name */}
               <TextInput
                 style={styles.textInput}
                 value={name}
@@ -43,8 +55,6 @@ const Start = ({ navigation }) => {
                 placeholder="Enter Your Name"
                 placeholderTextColor="#757083"
               />
-
-              {/* Color Selection Options */}
               <Text style={styles.colorText}>Choose Background Color:</Text>
               <View style={styles.colorContainer}>
                 {colors.map((color) => (
@@ -59,16 +69,9 @@ const Start = ({ navigation }) => {
                   />
                 ))}
               </View>
-
-              {/* Start Chatting Button */}
               <TouchableOpacity
                 style={styles.button}
-                onPress={() =>
-                  navigation.navigate("Chat", {
-                    name: name || "User",
-                    backgroundColor,
-                  })
-                }
+                onPress={handleStartChatting} // <-- Use new handler
               >
                 <Text style={styles.buttonText}>Start Chatting</Text>
               </TouchableOpacity>

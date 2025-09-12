@@ -1,87 +1,98 @@
+// Chat.js: Real-time messages, passes user info to GiftedChat, Firestore integration
+import React, { useState, useEffect } from 'react';
+import { Platform } from 'react-native';
+import { Bubble, GiftedChat, InputToolbar } from 'react-native-gifted-chat';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { collection, addDoc, onSnapshot, query, orderBy } from "firebase/firestore";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
-import { useState, useEffect, useCallback } from 'react';
-import { StyleSheet, KeyboardAvoidingView, Platform } from 'react-native';
-import { Bubble, GiftedChat, SystemMessage } from 'react-native-gifted-chat';
+const Chat = ({ route, navigation, db, isConnected = true }) => {
+  const { name, userID, backgroundColor } = route.params;
+  const [messages, setMessages] = useState([]);
 
-const Chat = ({ route, navigation }) => {
-  const { name, backgroundColor } = route.params;
-  const [messages, setMessages] = useState([
-    {
-      _id: 1,
-      text: "Hello developer",
-      createdAt: new Date(),
-      user: {
-        _id: 2,
-        name: "React Native",
-        avatar: "https://placeimg.com/140/140/any",
-      },
-    },
-    {
-      _id: 2,
-      text: "You have entered the chat",
-      createdAt: new Date(),
-      system: true,
-    },
-  ]);
-
-  // Set navigation title  npx expo run:android
-  useEffect(() => {
-    navigation.setOptions({ title: name });
-  }, [name]);
-
-  // Memoize onSend to prevent unnecessary re-renders
-  const onSend = useCallback((newMessages = []) => {
-    setMessages(prev => GiftedChat.append(prev, newMessages));
-  }, []);
-
-  // Bubble styling: user's bubble black with white text
-  const renderBubble = useCallback((props) => (
+  // Custom bubble styling
+  const renderBubble = (props) => (
     <Bubble
       {...props}
       wrapperStyle={{
-        right: { backgroundColor: '#000' },
-        left: { backgroundColor: '#FFF' },
+        right: { backgroundColor: "#ce8551ff" },
+        left: { backgroundColor: "#fffde8ff" }
       }}
-      textStyle={{
-        right: { color: '#fff' },
-        left: { color: '#222' },
-      }}
-    />
-  ), []);
-
-  // Dynamically set container background color
-  const containerStyle = [
-    styles.container,
-    { backgroundColor: backgroundColor || '#fff' }
-  ];
-
-  // Custom system message style
-  const renderSystemMessage = (props) => (
-    <SystemMessage
-      {...props}
-      textStyle={{ color: '#222', fontWeight: 'bold' }}
     />
   );
 
+  // Only show input if connected
+  const renderInputToolbar = (props) => (
+    isConnected ? <InputToolbar {...props} /> : null
+  );
+
+  // Save message to Firestore
+  const onSend = (newMessages) => {
+    addDoc(collection(db, "messages"), newMessages[0]);
+  };
+
+  useEffect(() => {
+    navigation.setOptions({ title: name });
+    let unsubMessages;
+    if (isConnected) {
+      const q = query(collection(db, "messages"), orderBy("createdAt", "desc"));
+      unsubMessages = onSnapshot(q, async (docs) => {
+        let newMessages = [];
+        docs.forEach(doc => {
+          newMessages.push({
+            _id: doc.id,
+            ...doc.data(),
+            createdAt: new Date(doc.data().createdAt.toMillis())
+          });
+        });
+        cacheMessages(newMessages);
+        setMessages(newMessages);
+      });
+    } else {
+      loadCachedMessages();
+    }
+    return () => {
+      if (unsubMessages) unsubMessages();
+    };
+  }, [isConnected, db, name, navigation]);
+
+  // Load messages from cache
+  const loadCachedMessages = async () => {
+    try {
+      const cachedMessages = await AsyncStorage.getItem('messages');
+      if (cachedMessages) {
+        setMessages(JSON.parse(cachedMessages));
+      }
+    } catch (error) {
+      console.error('Messages failed to load from AsyncStorage', error);
+    }
+  };
+
+  // Cache messages to AsyncStorage
+  const cacheMessages = async (messagesToCache) => {
+    try {
+      await AsyncStorage.setItem('messages', JSON.stringify(messagesToCache));
+    } catch (error) {
+      console.error('Failed to cache messages', error);
+    }
+  };
+
   return (
-    <KeyboardAvoidingView
-      style={containerStyle}
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+    <SafeAreaView style={{ flex: 1, backgroundColor }}
+      accessible={false}
+      importantForAccessibility="no"
     >
       <GiftedChat
         messages={messages}
-        onSend={onSend}
-        user={{ _id: 1 }}
+        onSend={messages => onSend(messages)}
+        user={{ _id: userID, name: name }}
+        keyboardShouldPersistTaps="handled"
+        keyboardVerticalOffset={Platform.OS === 'android' ? 30 : 0}
         renderBubble={renderBubble}
-        renderSystemMessage={renderSystemMessage}
+        renderInputToolbar={renderInputToolbar}
       />
-    </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 };
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-});
 
 export default Chat;
