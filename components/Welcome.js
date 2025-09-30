@@ -8,7 +8,7 @@ const Welcome = ({ navigation }) => {
   const signInUser = async () => {
     try {
       const result = await signInAnonymously(auth);
-      navigation.navigate('ShoppingLists', { userID: result.user.uid });
+      navigation.navigate('Start', { userID: result.user.uid });
       Alert.alert('Signed in Successfully!');
     } catch (e) {
       Alert.alert('Unable to sign in, try again.');
@@ -18,15 +18,9 @@ const Welcome = ({ navigation }) => {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.appTitle}>Shopping Lists</Text>
+      <Text style={styles.appTitle}>Welcome</Text>
       <TouchableOpacity style={styles.startButton} onPress={signInUser}>
-        <Text style={styles.startButtonText}>Get Started</Text>
-      </TouchableOpacity>
-      <TouchableOpacity
-        style={[styles.startButton, { marginTop: 12, backgroundColor: '#474056' }]}
-        onPress={() => navigation.navigate('Start')}
-      >
-        <Text style={styles.startButtonText}>Go to Chat</Text>
+        <Text style={styles.startButtonText}>Start Chatting</Text>
       </TouchableOpacity>
     </View>
   );
