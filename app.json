@@ -13,7 +13,6 @@
     },
     "android": {
       "package": "com.nicki.letschat"
-    },
-    "web": {}
-  }
+    }
 }
+} 

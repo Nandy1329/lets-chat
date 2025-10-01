@@ -28,7 +28,7 @@ const firebaseConfig = {
 // Initialize Firebase
 const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 const db = getFirestore(app);
-const auth = getAuth(app);
+getAuth(app); // still initializes auth, but we don’t need to pass it down anymore
 
 const Stack = createNativeStackNavigator();
 
@@ -48,9 +48,7 @@ const App = () => {
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Welcome">
         <Stack.Screen name="Welcome" component={Welcome} />
-        <Stack.Screen name="Start">
-          {(props) => <Start {...props} auth={auth} />}
-        </Stack.Screen>
+        <Stack.Screen name="Start" component={Start} />
         <Stack.Screen name="Chat">
           {(props) => (
             <Chat
@@ -63,5 +61,6 @@ const App = () => {
       </Stack.Navigator>
     </NavigationContainer>
   );
-}
+};
+
 export default App;
