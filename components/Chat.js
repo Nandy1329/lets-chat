@@ -13,7 +13,9 @@ import {
   StyleSheet,
   View,
   KeyboardAvoidingView,
-  Text
+  Text,
+  TouchableOpacity,
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -29,24 +31,24 @@ import {
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
+import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import * as ImagePicker from 'expo-image-picker';
 
 const Chat = ({ route, navigation, db, isConnected }) => {
   const { name, bgColor, userID } = route.params ?? {};
   const [messages, setMessages] = useState([]);
+  const [image, setImage] = useState(null);
+  const [uploading, setUploading] = useState(false);
   const botTimerRef = useRef(null);
   const unsubRef = useRef(null);
+  const storage = getStorage();
 
-  // Set screen title
   useLayoutEffect(() => {
     if (name) navigation.setOptions({ title: name });
   }, [name, navigation]);
 
-  // Subscribe to Firestore or load cached messages
   useEffect(() => {
-    if (!db) {
-      console.error('Firestore not available');
-      return;
-    }
+    if (!db) return console.error('Firestore not available');
 
     if (isConnected) {
       if (typeof unsubRef.current === 'function') {
@@ -55,7 +57,6 @@ const Chat = ({ route, navigation, db, isConnected }) => {
       }
 
       const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'));
-
       unsubRef.current = onSnapshot(q, (snapshot) => {
         const newMessages = snapshot.docs.map((doc) => {
           const data = doc.data();
@@ -65,7 +66,8 @@ const Chat = ({ route, navigation, db, isConnected }) => {
             createdAt: data.createdAt?.toDate
               ? data.createdAt.toDate()
               : (data.createdAt || new Date()),
-            user: data.user || { _id: 'unknown', name: 'Unknown' }
+            user: data.user || { _id: 'unknown', name: 'Unknown' },
+            image: data.image || null
           };
         });
         setMessages(newMessages);
@@ -83,7 +85,6 @@ const Chat = ({ route, navigation, db, isConnected }) => {
     };
   }, [isConnected]);
 
-  // Cache messages locally
   const cacheMessages = async (messagesToCache) => {
     try {
       await AsyncStorage.setItem('messages_list', JSON.stringify(messagesToCache));
@@ -92,7 +93,6 @@ const Chat = ({ route, navigation, db, isConnected }) => {
     }
   };
 
-  // Load cached messages
   const loadCachedMessages = async () => {
     try {
       const cached = await AsyncStorage.getItem('messages_list');
@@ -102,7 +102,6 @@ const Chat = ({ route, navigation, db, isConnected }) => {
     }
   };
 
-  // AI response generator
   const generateAIResponse = useMemo(() => {
     const responses = [
       "That's interesting! Tell me more.",
@@ -125,41 +124,103 @@ const Chat = ({ route, navigation, db, isConnected }) => {
     };
   }, []);
 
-  // Clean up bot timer
   useEffect(() => {
     return () => {
       if (botTimerRef.current) clearTimeout(botTimerRef.current);
     };
   }, []);
 
-  // Send message + bot reply
   const onSend = useCallback(async (newMessages = []) => {
     const m = newMessages[0];
-    if (!m?.text?.trim()) return;
+    if (!m?.text?.trim() && !m?.image) return;
 
     try {
       await addDoc(collection(db, 'messages'), {
-        text: m.text,
+        text: m.text || '',
+        image: m.image || null,
         createdAt: serverTimestamp(),
         user: { _id: userID || 'anonymous', name: name || 'You' }
       });
 
-      if (botTimerRef.current) clearTimeout(botTimerRef.current);
-      botTimerRef.current = setTimeout(async () => {
-        const aiText = generateAIResponse(m.text);
-        await addDoc(collection(db, 'messages'), {
-          text: aiText,
-          createdAt: serverTimestamp(),
-          user: { _id: 'ai-bot', name: 'ChatBot' }
-        });
-      }, 900);
+      if (m.text && botTimerRef.current) clearTimeout(botTimerRef.current);
+      if (m.text) {
+        botTimerRef.current = setTimeout(async () => {
+          const aiText = generateAIResponse(m.text);
+          await addDoc(collection(db, 'messages'), {
+            text: aiText,
+            createdAt: serverTimestamp(),
+            user: { _id: 'ai-bot', name: 'ChatBot' }
+          });
+        }, 900);
+      }
     } catch (err) {
       console.error('Send failed:', err);
       Alert.alert('Error', 'Could not send your message.');
     }
   }, [db, userID, name, generateAIResponse]);
 
-  // Custom bubble styling
+  const uploadImage = async (uri) => {
+    try {
+      setUploading(true);
+      const response = await fetch(uri);
+      const blob = await response.blob();
+      const filename = uri.split('/').pop();
+      const storageRef = ref(storage, `images/${filename}`);
+      const uploadTask = uploadBytesResumable(storageRef, blob);
+
+      uploadTask.on('state_changed', null, (error) => {
+        console.error('Upload error:', error);
+        Alert.alert('Upload failed', error.message);
+        setUploading(false);
+      }, async () => {
+        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+        onSend([{ image: downloadURL }]);
+        setUploading(false);
+      });
+    } catch (err) {
+      console.error('Upload error:', err);
+      Alert.alert('Upload failed', err.message);
+      setUploading(false);
+    }
+  };
+
+  const pickImage = async () => {
+    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission denied', 'We need access to your media library.');
+      return;
+    }
+
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ImagePicker.MediaTypeOptions.Images,
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      setImage(uri);
+      uploadImage(uri);
+    }
+  };
+
+  const takePhoto = async () => {
+    const { status } = await ImagePicker.requestCameraPermissionsAsync();
+    if (status !== 'granted') {
+      Alert.alert('Permission denied', 'We need access to your camera.');
+      return;
+    }
+
+    const result = await ImagePicker.launchCameraAsync({
+      quality: 1,
+    });
+
+    if (!result.canceled) {
+      const uri = result.assets[0].uri;
+      setImage(uri);
+      uploadImage(uri);
+    }
+  };
+
   const renderBubble = useCallback((props) => (
     <Bubble
       {...props}
@@ -174,9 +235,19 @@ const Chat = ({ route, navigation, db, isConnected }) => {
     />
   ), []);
 
-  // Hide input when offline
   const renderInputToolbar = (props) => (
     isConnected ? <InputToolbar {...props} /> : null
+  );
+
+  const renderActions = () => (
+    <View style={{ flexDirection: 'row', marginLeft: 10 }}>
+      <TouchableOpacity onPress={pickImage} accessibilityLabel="Pick image from library">
+        <Text style={{ fontSize: 16, marginRight: 10 }}>📁</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={takePhoto} accessibilityLabel="Take a photo">
+        <Text style={{ fontSize: 16 }}>📷</Text>
+      </TouchableOpacity>
+    </View>
   );
 
   const keyboardOffset = Platform.select({ ios: 88, android: 0 });
@@ -195,6 +266,7 @@ const Chat = ({ route, navigation, db, isConnected }) => {
           user={{ _id: userID || 'anonymous', name: name || 'You' }}
           renderBubble={renderBubble}
           renderInputToolbar={renderInputToolbar}
+          renderActions={renderActions}
           placeholder="Message..."
           alwaysShowSend
           showUserAvatar
@@ -204,6 +276,12 @@ const Chat = ({ route, navigation, db, isConnected }) => {
             left: { color: '#6b7280' }
           }}
         />
+
+        {uploading && (
+          <View style={styles.uploading}>
+            <Text style={styles.uploadingText}>Uploading image...</Text>
+          </View>
+        )}
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={keyboardOffset}
@@ -215,7 +293,19 @@ const Chat = ({ route, navigation, db, isConnected }) => {
 
 const styles = StyleSheet.create({
   safeArea: { flex: 1 },
-  container: { flex: 1 }
+  container: { flex: 1 },
+  uploading: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    backgroundColor: '#000000aa',
+    padding: 8,
+    borderRadius: 6
+  },
+  uploadingText: {
+    color: '#fff',
+    fontSize: 14
+  }
 });
 
 export default Chat;

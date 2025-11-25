@@ -11,7 +11,6 @@ import { getFirestore, disableNetwork, enableNetwork } from 'firebase/firestore'
 import { getAuth } from 'firebase/auth';
 
 // Screens
-import Welcome from './components/Welcome';
 import Start from './components/Start';
 import Chat from './components/Chat';
 
@@ -47,7 +46,6 @@ const App = () => {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName="Welcome">
-        <Stack.Screen name="Welcome" component={Welcome} />
         <Stack.Screen name="Start" component={Start} />
         <Stack.Screen name="Chat">
           {(props) => (
