@@ -12,7 +12,12 @@
       "bundleIdentifier": "com.nicki.letschat"
     },
     "android": {
-      "package": "com.nicki.letschat"
+      "package": "com.nicki.letschat",
+      "config": {
+        "googleMaps": {
+          "apiKey": "YOUR_ANDROID_API_KEY"
+        }
+      }
     }
+  }
 }
-} 

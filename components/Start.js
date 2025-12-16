@@ -7,23 +7,30 @@ import {
   TouchableOpacity,
   ImageBackground
 } from 'react-native';
-
-const bgImage = require('../assets/background-image.png');
+import { auth } from '../firebase';
+import { signInAnonymously } from 'firebase/auth';
+import bgImage from '../assets/background-image.png';
 const colors = ['#090C08', '#474056', '#8A95A5', '#B9C6AE'];
 
-const Start = ({ navigation, route }) => {
+const Start = ({ navigation }) => {
   const [name, setName] = useState('');
   const [bgColor, setBgColor] = useState(colors[0]);
 
-  // userID is passed from Welcome after sign-in
-  const { userID } = route.params ?? {};
+  const handleContinue = async () => {
+    try {
+      // Sign in anonymously with Firebase
+      const result = await signInAnonymously(auth);
+      const userID = result.user.uid;
 
-  const handleContinue = () => {
-    navigation.navigate('Chat', {
-      name: name.trim() || 'User',
-      bgColor,
-      userID
-    });
+      // Navigate to Chat with user data
+      navigation.navigate('Chat', {
+        name: name.trim() || 'User',
+        bgColor,
+        userID,
+      });
+    } catch (error) {
+      console.error('Auth error:', error);
+    }
   };
 
   return (

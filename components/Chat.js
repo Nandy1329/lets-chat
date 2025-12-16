@@ -13,9 +13,7 @@ import {
   StyleSheet,
   View,
   KeyboardAvoidingView,
-  Text,
-  TouchableOpacity,
-  Image
+  Text
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import {
@@ -31,14 +29,22 @@ import {
   orderBy,
   serverTimestamp
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytesResumable, getDownloadURL } from 'firebase/storage';
+import {
+  getStorage,
+  ref,
+  uploadBytesResumable,
+  getDownloadURL
+} from 'firebase/storage';
 import * as ImagePicker from 'expo-image-picker';
+import * as Location from 'expo-location';
+import MapView, { Marker } from 'react-native-maps';
+import CustomActions from './CustomActions';
 
 const Chat = ({ route, navigation, db, isConnected }) => {
   const { name, bgColor, userID } = route.params ?? {};
   const [messages, setMessages] = useState([]);
-  const [image, setImage] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState(0);
   const botTimerRef = useRef(null);
   const unsubRef = useRef(null);
   const storage = getStorage();
@@ -48,7 +54,10 @@ const Chat = ({ route, navigation, db, isConnected }) => {
   }, [name, navigation]);
 
   useEffect(() => {
-    if (!db) return console.error('Firestore not available');
+    if (!db) {
+      console.error('Firestore not available');
+      return;
+    }
 
     if (isConnected) {
       if (typeof unsubRef.current === 'function') {
@@ -67,7 +76,8 @@ const Chat = ({ route, navigation, db, isConnected }) => {
               ? data.createdAt.toDate()
               : (data.createdAt || new Date()),
             user: data.user || { _id: 'unknown', name: 'Unknown' },
-            image: data.image || null
+            image: data.image || null,
+            location: data.location || null
           };
         });
         setMessages(newMessages);
@@ -83,7 +93,7 @@ const Chat = ({ route, navigation, db, isConnected }) => {
         unsubRef.current = null;
       }
     };
-  }, [isConnected]);
+  }, [isConnected, db]);
 
   const cacheMessages = async (messagesToCache) => {
     try {
@@ -132,12 +142,13 @@ const Chat = ({ route, navigation, db, isConnected }) => {
 
   const onSend = useCallback(async (newMessages = []) => {
     const m = newMessages[0];
-    if (!m?.text?.trim() && !m?.image) return;
+    if (!m?.text?.trim() && !m?.image && !m?.location) return;
 
     try {
       await addDoc(collection(db, 'messages'), {
         text: m.text || '',
         image: m.image || null,
+        location: m.location || null,
         createdAt: serverTimestamp(),
         user: { _id: userID || 'anonymous', name: name || 'You' }
       });
@@ -162,62 +173,37 @@ const Chat = ({ route, navigation, db, isConnected }) => {
   const uploadImage = async (uri) => {
     try {
       setUploading(true);
+      setUploadProgress(0);
       const response = await fetch(uri);
       const blob = await response.blob();
-      const filename = uri.split('/').pop();
-      const storageRef = ref(storage, `images/${filename}`);
+
+      const timestamp = Date.now();
+      const filename = uri.split('/').pop() || `photo_${timestamp}.jpg`;
+      const storageRef = ref(storage, `user_uploads/${userID || 'anonymous'}/${timestamp}_${filename}`);
+
       const uploadTask = uploadBytesResumable(storageRef, blob);
 
-      uploadTask.on('state_changed', null, (error) => {
-        console.error('Upload error:', error);
-        Alert.alert('Upload failed', error.message);
-        setUploading(false);
-      }, async () => {
-        const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
-        onSend([{ image: downloadURL }]);
-        setUploading(false);
-      });
+      uploadTask.on('state_changed',
+        (snapshot) => {
+          const progress = snapshot.bytesTransferred / snapshot.totalBytes;
+          setUploadProgress(Math.round(progress * 100));
+        },
+        (error) => {
+          console.error('Upload error:', error);
+          Alert.alert('Upload failed', error.message);
+          setUploading(false);
+        },
+        async () => {
+          const downloadURL = await getDownloadURL(uploadTask.snapshot.ref);
+          onSend([{ image: downloadURL }]);
+          setUploading(false);
+          setUploadProgress(0);
+        }
+      );
     } catch (err) {
       console.error('Upload error:', err);
       Alert.alert('Upload failed', err.message);
       setUploading(false);
-    }
-  };
-
-  const pickImage = async () => {
-    const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission denied', 'We need access to your media library.');
-      return;
-    }
-
-    const result = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ImagePicker.MediaTypeOptions.Images,
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      const uri = result.assets[0].uri;
-      setImage(uri);
-      uploadImage(uri);
-    }
-  };
-
-  const takePhoto = async () => {
-    const { status } = await ImagePicker.requestCameraPermissionsAsync();
-    if (status !== 'granted') {
-      Alert.alert('Permission denied', 'We need access to your camera.');
-      return;
-    }
-
-    const result = await ImagePicker.launchCameraAsync({
-      quality: 1,
-    });
-
-    if (!result.canceled) {
-      const uri = result.assets[0].uri;
-      setImage(uri);
-      uploadImage(uri);
     }
   };
 
@@ -239,16 +225,36 @@ const Chat = ({ route, navigation, db, isConnected }) => {
     isConnected ? <InputToolbar {...props} /> : null
   );
 
-  const renderActions = () => (
-    <View style={{ flexDirection: 'row', marginLeft: 10 }}>
-      <TouchableOpacity onPress={pickImage} accessibilityLabel="Pick image from library">
-        <Text style={{ fontSize: 16, marginRight: 10 }}>📁</Text>
-      </TouchableOpacity>
-      <TouchableOpacity onPress={takePhoto} accessibilityLabel="Take a photo">
-        <Text style={{ fontSize: 16 }}>📷</Text>
-      </TouchableOpacity>
-    </View>
+  const renderActions = (props) => (
+    <CustomActions
+      {...props}
+      onSend={onSend}
+      storage={storage}
+      userId={userID}
+      pickImage={uploadImage}
+    />
   );
+
+  const renderCustomView = (props) => {
+    const { currentMessage } = props;
+    if (currentMessage?.location) {
+      return (
+        <MapView
+          style={{ width: 150, height: 100, borderRadius: 8, marginTop: 6 }}
+          region={{
+            latitude: currentMessage.location.latitude,
+            longitude: currentMessage.location.longitude,
+            latitudeDelta: 0.0922,
+            longitudeDelta: 0.0421,
+          }}
+          pointerEvents="none"
+        >
+          <Marker coordinate={currentMessage.location} />
+        </MapView>
+      );
+    }
+    return null;
+  };
 
   const keyboardOffset = Platform.select({ ios: 88, android: 0 });
 
@@ -260,6 +266,7 @@ const Chat = ({ route, navigation, db, isConnected }) => {
             <Text>Loading messages...</Text>
           </View>
         )}
+
         <GiftedChat
           messages={messages}
           onSend={onSend}
@@ -267,6 +274,7 @@ const Chat = ({ route, navigation, db, isConnected }) => {
           renderBubble={renderBubble}
           renderInputToolbar={renderInputToolbar}
           renderActions={renderActions}
+          renderCustomView={renderCustomView}
           placeholder="Message..."
           alwaysShowSend
           showUserAvatar
@@ -279,9 +287,12 @@ const Chat = ({ route, navigation, db, isConnected }) => {
 
         {uploading && (
           <View style={styles.uploading}>
-            <Text style={styles.uploadingText}>Uploading image...</Text>
+            <Text style={styles.uploadingText}>
+              Uploading image... {uploadProgress}%
+            </Text>
           </View>
         )}
+
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : undefined}
           keyboardVerticalOffset={keyboardOffset}
