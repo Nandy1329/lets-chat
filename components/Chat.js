@@ -1,221 +1,186 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import React, {
-  useCallback,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState
-} from 'react';
+/**
+ * Chat Screen Component
+ * 
+ * This component implements a fully functional chat interface using the Gifted Chat library.
+ * Features include:
+ * - Real-time messaging with GiftedChat
+ * - Custom message bubbles with theme colors
+ * - System messages for user join notifications
+ * - Keyboard handling for better UX across platforms
+ * - Custom navigation header with user's name and selected background color
+ * 
+ * Props received from navigation:
+ * - name: User's name entered on the start screen
+ * - backgroundColor: Selected background color from the start screen
+ */
+
+import { useState, useEffect, useCallback } from "react";
 import {
-  Alert,
-  Platform,
   StyleSheet,
   View,
   KeyboardAvoidingView,
-  Text
+  Platform,
+  Alert
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import {
-  Bubble,
-  GiftedChat,
-  InputToolbar
-} from 'react-native-gifted-chat';
-import {
-  collection,
-  addDoc,
-  onSnapshot,
-  query,
-  orderBy,
-  serverTimestamp
-} from 'firebase/firestore';
+import { GiftedChat, InputToolbar } from "react-native-gifted-chat";
+// Firestore realtime query and writes
+import { collection, query, orderBy, onSnapshot, addDoc } from 'firebase/firestore';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+
+const MESSAGES_KEY = 'chat_messages';
 
 const Chat = ({ route, navigation, db, isConnected }) => {
-  const { name, bgColor, userID } = route.params ?? {};
+  // Extract the name, userId, and backgroundColor from route parameters
+  const { name, userId, backgroundColor } = route.params;
+  
+  // State to store chat messages
   const [messages, setMessages] = useState([]);
-  const botTimerRef = useRef(null);
-  const unsubRef = useRef(null);
 
-  // Set screen title
-  useLayoutEffect(() => {
-    if (name) navigation.setOptions({ title: name });
-  }, [name, navigation]);
-
-  // Subscribe to Firestore or load cached messages
+  // Set the navigation header title to display the user's name
   useEffect(() => {
-    if (!db) {
-      console.error('Firestore not available');
-      return;
-    }
+    navigation.setOptions({ 
+      title: name,
+      headerStyle: {
+        backgroundColor: backgroundColor,
+      },
+      headerTintColor: '#fff',
+      headerTitleStyle: {
+        fontWeight: 'bold',
+      },
+    });
+  }, [navigation, name, backgroundColor]);
 
-    if (isConnected) {
-      if (typeof unsubRef.current === 'function') {
-        unsubRef.current();
-        unsubRef.current = null;
+  // Load from Firestore when online; otherwise from local cache
+  useEffect(() => {
+    let unsubscribe = () => {};
+
+    const loadFromCache = async () => {
+      try {
+        const raw = await AsyncStorage.getItem(MESSAGES_KEY);
+        if (!raw) return;
+        const parsed = JSON.parse(raw);
+        const restored = Array.isArray(parsed)
+          ? parsed.map((m) => ({ ...m, createdAt: new Date(m.createdAt) }))
+          : [];
+        setMessages(restored);
+      } catch (e) {
+        if (__DEV__) console.warn('Failed to load cached messages:', e?.message || e);
       }
+    };
 
+    const subscribeOnline = () => {
+      if (!db) return;
       const q = query(collection(db, 'messages'), orderBy('createdAt', 'desc'));
-
-      unsubRef.current = onSnapshot(q, (snapshot) => {
-        const newMessages = snapshot.docs.map((doc) => {
-          const data = doc.data();
+      unsubscribe = onSnapshot(q, async (snapshot) => {
+        const fetched = snapshot.docs.map((doc) => {
+          const data = doc.data() || {};
+          const createdAtRaw = data.createdAt;
+          const createdAt = createdAtRaw?.toDate
+            ? createdAtRaw.toDate()
+            : (createdAtRaw ? new Date(createdAtRaw) : new Date());
           return {
             _id: doc.id,
-            text: data.text || '',
-            createdAt: data.createdAt?.toDate
-              ? data.createdAt.toDate()
-              : (data.createdAt || new Date()),
-            user: data.user || { _id: 'unknown', name: 'Unknown' }
+            text: data.text ?? '',
+            createdAt,
+            user: data.user ?? {
+              _id: 1,
+              name,
+              avatar: 'https://placeimg.com/140/140/any',
+            },
+            ...(data.system ? { system: true } : {}),
           };
         });
-        setMessages(newMessages);
-        cacheMessages(newMessages);
+        setMessages(fetched);
+        // Cache for offline usage (store serializable form)
+        try {
+          const toCache = fetched.map((m) => ({ ...m, createdAt: m.createdAt?.toISOString?.() || m.createdAt }));
+          await AsyncStorage.setItem(MESSAGES_KEY, JSON.stringify(toCache));
+        } catch (e) {
+          if (__DEV__) console.warn('Failed to cache messages:', e?.message || e);
+        }
       });
+    };
+
+    if (isConnected) {
+      subscribeOnline();
     } else {
-      loadCachedMessages();
+      loadFromCache();
     }
 
-    return () => {
-      if (typeof unsubRef.current === 'function') {
-        unsubRef.current();
-        unsubRef.current = null;
-      }
-    };
+    return () => unsubscribe && unsubscribe();
+  }, [db, name, isConnected]);
+
+  // Callback function to handle sending new messages
+  const onSend = useCallback((newMessages = []) => {
+    if (!isConnected) {
+      Alert.alert('You are offline', 'Cannot send messages while offline.');
+      return;
+    }
+    addDoc(collection(db, 'messages'), newMessages[0]);
+  }, [db, isConnected]);
+
+  // When offline, hide the input toolbar so users cannot compose messages
+  const renderInputToolbar = useCallback((toolbarProps) => {
+    if (!isConnected) return null;
+    return <InputToolbar {...toolbarProps} />;
   }, [isConnected]);
 
-  // Cache messages locally
-  const cacheMessages = async (messagesToCache) => {
-    try {
-      await AsyncStorage.setItem('messages_list', JSON.stringify(messagesToCache));
-    } catch (err) {
-      console.warn('Cache failed:', err.message);
-    }
-  };
-
-  // Load cached messages
-  const loadCachedMessages = async () => {
-    try {
-      const cached = await AsyncStorage.getItem('messages_list');
-      if (cached) setMessages(JSON.parse(cached));
-    } catch (err) {
-      console.warn('Cache load failed:', err.message);
-    }
-  };
-
-  // AI response generator
-  const generateAIResponse = useMemo(() => {
-    const responses = [
-      "That's interesting! Tell me more.",
-      'I understand. How can I help you with that?',
-      'Thanks for sharing! What else is on your mind?',
-      'Great point! I appreciate your perspective.',
-      'I see what you mean. Anything else you’d like to discuss?',
-      'Fascinating! Can you elaborate on that?',
-      "I'm here to chat! What would you like to talk about next?"
-    ];
-
-    return (text) => {
-      const lower = (text || '').toLowerCase();
-      if (lower.includes('hello') || lower.includes('hi')) return 'Hello! How are you doing today?';
-      if (lower.includes('how are you')) return "I'm doing great, thank you for asking! How about you?";
-      if (lower.includes('goodbye') || lower.includes('bye')) return 'Goodbye! It was nice chatting with you!';
-      if (lower.includes('help')) return "I'm here to help! What do you need assistance with?";
-      if (lower.includes('weather')) return 'I wish I could check the weather for you! Try asking about something else.';
-      return responses[Math.floor(Math.random() * responses.length)];
-    };
-  }, []);
-
-  // Clean up bot timer
-  useEffect(() => {
-    return () => {
-      if (botTimerRef.current) clearTimeout(botTimerRef.current);
-    };
-  }, []);
-
-  // Send message + bot reply
-  const onSend = useCallback(async (newMessages = []) => {
-    const m = newMessages[0];
-    if (!m?.text?.trim()) return;
-
-    try {
-      await addDoc(collection(db, 'messages'), {
-        text: m.text,
-        createdAt: serverTimestamp(),
-        user: { _id: userID || 'anonymous', name: name || 'You' }
-      });
-
-      if (botTimerRef.current) clearTimeout(botTimerRef.current);
-      botTimerRef.current = setTimeout(async () => {
-        const aiText = generateAIResponse(m.text);
-        await addDoc(collection(db, 'messages'), {
-          text: aiText,
-          createdAt: serverTimestamp(),
-          user: { _id: 'ai-bot', name: 'ChatBot' }
-        });
-      }, 900);
-    } catch (err) {
-      console.error('Send failed:', err);
-      Alert.alert('Error', 'Could not send your message.');
-    }
-  }, [db, userID, name, generateAIResponse]);
-
-  // Custom bubble styling
-  const renderBubble = useCallback((props) => (
-    <Bubble
-      {...props}
-      wrapperStyle={{
-        right: { backgroundColor: '#111' },
-        left: { backgroundColor: '#f2f3f5' }
-      }}
-      textStyle={{
-        right: { color: '#fff' },
-        left: { color: '#1f2937' }
-      }}
-    />
-  ), []);
-
-  // Hide input when offline
-  const renderInputToolbar = (props) => (
-    isConnected ? <InputToolbar {...props} /> : null
-  );
-
-  const keyboardOffset = Platform.select({ ios: 88, android: 0 });
-
   return (
-    <SafeAreaView style={[styles.safeArea, { backgroundColor: bgColor || '#fff' }]} edges={['top', 'bottom']}>
-      <View style={styles.container}>
-        {messages.length === 0 && (
-          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-            <Text>Loading messages...</Text>
-          </View>
-        )}
+    <View style={[styles.container, { backgroundColor: backgroundColor }]}>
+      {/* KeyboardAvoidingView ensures the keyboard doesn't cover the input field */}
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {/* GiftedChat component handles all chat functionality */}
         <GiftedChat
           messages={messages}
-          onSend={onSend}
-          user={{ _id: userID || 'anonymous', name: name || 'You' }}
-          renderBubble={renderBubble}
+          onSend={messages => onSend(messages)}
           renderInputToolbar={renderInputToolbar}
-          placeholder="Message..."
-          alwaysShowSend
-          showUserAvatar
-          scrollToBottom
-          timeTextStyle={{
-            right: { color: '#d1d5db' },
-            left: { color: '#6b7280' }
+          user={{
+            _id: userId,
+            name: name,
+            avatar: 'https://placeimg.com/140/140/any', // Placeholder avatar
           }}
+          // Firestore database instance is available as `db` prop for future persistence
+          // Custom styling for the input toolbar
+          textInputStyle={styles.textInput}
+          // Placeholder text for the input
+          placeholder="Type a message..."
+          // Show user avatars
+          showUserAvatar={true}
+          // Show timestamp for each message
+          showAvatarForEveryMessage={true}
         />
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={keyboardOffset}
-        />
-      </View>
-    </SafeAreaView>
+      </KeyboardAvoidingView>
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  safeArea: { flex: 1 },
-  container: { flex: 1 }
+  // Main container that fills the entire screen
+  container: {
+    flex: 1,
+  },
+  
+  // KeyboardAvoidingView to handle keyboard behavior
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  
+  // Custom styling for the text input field
+  textInput: {
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#E5E5EA',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    fontSize: 16,
+    backgroundColor: '#FFFFFF',
+    marginHorizontal: 10,
+    marginVertical: 5,
+  },
 });
 
 export default Chat;
