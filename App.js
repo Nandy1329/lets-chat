@@ -6,6 +6,7 @@ import React, { useEffect, useMemo } from 'react';
 import { db } from './firebase';
 import { enableNetwork, disableNetwork  } from 'firebase/firestore';
 import { useNetInfo } from '@react-native-community/netinfo';
+import { disableNetwork, enableNetwork } from 'firebase/firestore';
 
 // import the screens
 import Start from './components/Start';
